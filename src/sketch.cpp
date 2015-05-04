@@ -1,7 +1,7 @@
 //#include <Servo.h>
 //#include <NewPing.h>
 #define k_theta 40.0
-#define k_v_ang 0.66
+#define k_v_ang 0.69
 #define k_pos_lin 600.0
 #define k_v_lin 20.0
 
