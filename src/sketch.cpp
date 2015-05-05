@@ -45,13 +45,13 @@ int stby_pin=9;
 //int distance2stop=40;
 
 //unsigned long T_sonar200=33;	//czas probkowania sonaru
-unsigned long T_end=30000;
+unsigned long T_end=10000;
 unsigned long T_led=1000;
 unsigned long T_vol=100;		//czas probkowania napiecia
 unsigned long T_vol_in=2000; 	//czas ch. filtru pomiaru napiecia
-unsigned long T_serial_write=500;	// co jaki czas wysylamy dane do kompa
+unsigned long T_serial_write=1000;	// co jaki czas wysylamy dane do kompa
 unsigned long T_gyro=3;
-unsigned long T_acc=300000;
+unsigned long T_acc=3;
 unsigned long T_control=5;
 //float k_theta=25.0;
 //float k_v_ang=0.6;
@@ -415,7 +415,7 @@ void setup() {
 
   //  digitalWrite(stby_pin,HIGH);
     vol=15.0*((float)analogRead(vol_pin))/1023.0;
-  Serial.print("Voltage0: ");
+  Serial.print("Voltage: ");
   Serial.println(vol);
   Wire.begin();
   compass.init();
@@ -544,8 +544,8 @@ void loop() {
 //	Serial.println(dt_gyro,4);
 
 	angular_int();
-// ===============================================================
-	t_control_new=micros();
+// =============  CONTROL  ==================================================
+/*	t_control_new=micros();
         dt_control=((float)(t_control_new-t_control))/1000000.0;
         t_control=t_control_new;
 
@@ -572,9 +572,10 @@ void loop() {
                 analogWrite(green_led,0);
                 analogWrite(red_led, 0);
         }
+*/
 
-
-// ===============================================================
+// ===============  SENS INFO  ================================
+	/*
 	if(millis()<T_end)
 	{
 		for(i=0;i<3;i++)
@@ -590,6 +591,7 @@ void loop() {
 		Serial.print("  ");
 	        Serial.println(t_gyro);
 	}
+	*/
 //	compass.read();
 //	pressure = ps.readPressureMillibars();
 	//altitude = ps.pressureToAltitudeMeters(pressure);
@@ -614,11 +616,32 @@ void loop() {
     {
 	time_serial_write=millis();
 	
-	if(millis()>T_end){
+//	if(millis()>T_end){
 		Serial.print("Napiecie: ");
 		Serial.print(vol);
 		Serial.println(" V");
-	}
+//	}
+	for(i=0;i<3;i++)
+        {
+                Serial.print(v_ang[i]);
+                Serial.print("  ");
+                Serial.print(theta[i]);
+                Serial.print("  ");
+        }
+        Serial.print(pos_lin);
+        Serial.print("  ");
+        Serial.print(v_lin);
+        Serial.print("  ");
+        Serial.println(t_gyro);
+        for(i=0;i<3;i++)
+        {
+                Serial.print(acc[i]);
+                Serial.print("  ");
+        }
+	Serial.print(acc_total,1);
+	Serial.print(" ");
+        Serial.println(t_acc);
+
 /*
 	Serial.print("Angular vel. ");
 	Serial.print("X: ");
@@ -636,18 +659,14 @@ void loop() {
         Serial.println(theta[2]);
 	Serial.println(dt_gyro,4);
 	Serial.println(dt_acc,4);
-
-	//snprintf(report, sizeof(report), "A: %.d %6d %6d    M: %6d %6d %6d",
-	//compass.a.x, compass.a.y, compass.a.z,
-	//compass.m.x, compass.m.y, compass.m.z);
-	//Serial.println(report);
-	for(i=0;i<3;i++)
-	{
-		Serial.print(acc[i]);
-		Serial.print("  ");
-	}
-	Serial.println(acc_total,1);
 */
+/*
+	snprintf(report, sizeof(report), "A: %.d %6d %6d    M: %6d %6d %6d",
+	compass.a.x, compass.a.y, compass.a.z,
+	compass.m.x, compass.m.y, compass.m.z);
+	Serial.println(report);
+*/
+
 //	Serial.print("p: ");
 //	Serial.print(pressure);
 //	Serial.print(" mbar\ta: ");
