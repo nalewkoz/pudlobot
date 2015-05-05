@@ -9,7 +9,7 @@
 #include <LSM303.h>
 #include <L3G.h>
 #include <LPS.h>
-
+#include <avr/sleep.h>
 L3G gyro;
 LSM303 compass;
 LPS ps;
@@ -192,6 +192,12 @@ public:
 	analogWrite(pwmb_pin,0);
 	breaking=1;
     }
+    void sleep_forever()
+    {
+	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+	sleep_enable();
+	sleep_mode();
+    }
     int fulfill_write()
     {
 	int pin=atoi(a1);
@@ -208,6 +214,10 @@ public:
 	    velocity=value;
 	    if(!breaking)	 set_pwm(value,value);
 	    else {speeda=value; speedb=value;}
+	}
+	else
+	{
+	    analogWrite(pin,value);
 	}
 	return pin;
     }    
@@ -264,6 +274,9 @@ public:
 //			Serial.println("Odczytalem c");
 			pos=0;
 			state=6;
+			break;
+		    case '*':
+			state=7;
 			break;
 		    default:
 //			Serial.println("Odczytalem nie wiem co..");
@@ -345,7 +358,17 @@ public:
 		    fulfill_control();
 		}
 		break;
-		
+            case 7:
+		if(cc='\n')
+		{
+			state=0;
+			sleep_forever();
+		}
+		else
+		{
+			state=0;
+		}
+		break;		
 	    default:
 		state=0;
 	}
@@ -437,7 +460,7 @@ void setup() {
   analogWrite(blue_led,200);
   analogWrite(green_led,255);
   analogWrite(red_led, 0);
-  delay(8000);
+  delay(5000);
   analogWrite(blue_led,0);
   
   for(int i=0;i<3;i++)
@@ -605,13 +628,15 @@ void loop() {
 //	light_int=analogRead(light_pin);
 //	current= 36.7*((float)analogRead(current_pin))/1023.0-18.3;
     }
-    if(millis()-time_led>T_led)
+
+// ==== MIGAJACY MALY LED =====
+/*    if(millis()-time_led>T_led)
     {
 	time_led=millis();
 	led_state=!led_state;
 	digitalWrite(led_pin,led_state);
     } 
-
+*/
     if(millis()-time_serial_write>T_serial_write)
     {
 	time_serial_write=millis();

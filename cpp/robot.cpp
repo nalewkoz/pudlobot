@@ -8,6 +8,9 @@
 #define cam_servo_inc 50
 #define serial_baud 115200
 #define speed_inc 5
+#define blue_pin 9
+#define red_pin 11
+#define green_pin 10
 
 using namespace std;
 
@@ -30,7 +33,7 @@ int main()
 {
     init();
     
-    cout<<"Sterujemy robotem. Do sterowania  (a,s,w,d,b,u,h,m,n)\nBy wyjsc: q\n";
+    cout<<"Sterujemy robotem (awsdzx, =-, uh, lo)\nBy wyjsc: q\n";
     do
     {
 	c=getch();
@@ -78,7 +81,17 @@ int main()
 		send_command(cam_servo_pin,cam_servo);
 		cout<<"cam_servo="<<cam_servo<<"\n";
 		break;
-	    
+	    case 'l':
+		send_command(blue_pin,0);
+		send_command(red_pin,0);
+		send_command(green_pin,0);
+		break;
+	    case 'o':
+		send_command(green_pin,255);
+		break;
+	    case '*':
+		serialPrintf(fd,"*\n");
+		break;
 	    case 'q':
 		break;
 	    default:
