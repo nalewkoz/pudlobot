@@ -4,7 +4,7 @@
 #define k_v_ang 0.69
 #define k_pos_lin 600.0
 #define k_v_lin 20.0
-#define k_acc1 0.3
+#define k_acc 0.1
 
 #include <Wire.h>
 #include <LSM303.h>
@@ -503,7 +503,7 @@ void stop_balance()
 }
 void acc_average(int N)
 {
-  int i;
+  int i,rc=0;
   for(i=0;i<3;i++) acc_av[i]=0;
 
   for(i=1;i<N;i++)
@@ -520,7 +520,7 @@ void acc_average(int N)
     acc_av[2]+=((float)compass.a.z)*acc_gain;
     delay(10*T_acc);
   }
-  for(i=1;i<3;i++) acc_ac[i]/=(float)N;
+  for(i=0;i<3;i++) acc_av[i]/=(float)N;
 }
 void init_balance()
 {
@@ -564,7 +564,7 @@ void loop() {
 	pos_lin=pos_lin+v_lin*dt_control;
 
 	
-	moc=(int)((7.4/vol)*( k_acc*(acc[0]-acc_av[0]))+ k_theta*theta[1] + k_v_ang*v_ang[1] + k_pos_lin*pos_lin + k_v_lin*v_lin));
+	moc=(int)((7.4/vol)*( k_acc*(acc[0]-acc_av[0])+ k_theta*theta[1] + k_v_ang*v_ang[1] + k_pos_lin*pos_lin + k_v_lin*v_lin));
 	if(moc>255) moc=255;
 	else if(moc<-255) moc=-255;
 	
