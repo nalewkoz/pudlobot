@@ -57,7 +57,12 @@ int main()
 	    case 'd':
 		serialPrintf(fd,"c5\n");
 		break;
-
+	    case 'b':
+		serialPrintf(fd,"c6\n");
+		break;
+	    case 'v':
+		serialPrintf(fd,"c7\n");
+		break;
 	    case '=':
 		speed+=speed_inc;
 		send_command(-1,speed);
@@ -68,7 +73,6 @@ int main()
 		send_command(-1,speed);
 		cout<<"speed="<<speed<<"\n";
 		break;
-
 	    case 'u':
 		cam_servo+=cam_servo_inc;
 		if(cam_servo>cam_servo_max) cam_servo=cam_servo_max;

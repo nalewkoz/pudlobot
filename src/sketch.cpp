@@ -4,6 +4,7 @@
 #define k_v_ang 0.69
 #define k_pos_lin 600.0
 #define k_v_lin 20.0
+#define k_acc1 0.3
 
 #include <Wire.h>
 #include <LSM303.h>
@@ -76,9 +77,12 @@ int odl,msec;
 int state_move=1;		// na poczatku stoimy
 int velocity=100;			// zadana predkosc
 
+int auto_balance=0;
+
 float vol, vol_act,a_vol;
 int light_int;
 float drift_av[3];
+float acc_av[3];
 float theta[3];
 float v_ang[3];
 float acc[3];
@@ -109,6 +113,7 @@ class MyCommand {
 	4 = znam komende i to jest read, czekam na spacje
 	5 = wczytuje liczbe (gdy \n koniec i wykonujemy komende)
 	6 = znam komende i jest to command. Wczytuje liczbe (czyli musi byc bez spacji!)
+	7 = znam komende i jest sleep. 
     */
 private:
     char a1[10];
@@ -227,8 +232,18 @@ public:
     }
     int fulfill_control()
     {
+
 	int val=atoi(a1);
 	// set_pwm(velocity,velocity); //Potrzebne tylko, gdy gladkie hamowanie...
+	if(auto_balance)
+        {
+		if(val==7) 
+		{ 
+			stop_balance();
+			return 0;
+	        } 
+		return -1;
+	}
 	switch(val)
 	{
 	    case 0:
@@ -249,7 +264,12 @@ public:
 	    case 5:
 		turn_right();
 		break;
-		
+            case 6:
+		init_balance();
+		break;
+//	    case 7:
+//		stop_balance();
+//		break;
 	    default:
 		return 0;
 	}
@@ -275,9 +295,10 @@ public:
 			pos=0;
 			state=6;
 			break;
-		    case '*':
+		    case '*': // sleep_mode!
 			state=7;
 			break;
+		    
 		    default:
 //			Serial.println("Odczytalem nie wiem co..");
 			state=0;
@@ -405,7 +426,7 @@ void drift_average(int N)
 		drift_av[0]+=gyro.g.x*gyro_gain;
 		drift_av[1]+=gyro.g.y*gyro_gain;
 		drift_av[2]+=gyro.g.z*gyro_gain;
-		delay(20*T_gyro);
+		delay(10*T_gyro);
 	}
 	for(k=0;k<3;k++) drift_av[k]/=(float)N;
 	pos_lin=0.0;
@@ -413,8 +434,8 @@ void drift_average(int N)
 }
 // the setup routine runs once when you press reset:
 void setup() {                
-    analogWrite(blue_led,0);
-    analogWrite(green_led,0);
+    analogWrite(blue_led,255);
+    analogWrite(green_led,255);
     analogWrite(red_led, 255);
 
     pinMode(led_pin, OUTPUT);
@@ -455,25 +476,72 @@ void setup() {
     while (1);
   }
   ps.enableDefault();
-  delay(100);
-  drift_average(100);
-  analogWrite(blue_led,200);
+  delay(2000);
   analogWrite(green_led,255);
-  analogWrite(red_led, 0);
-  delay(5000);
+  analogWrite(red_led,0);
   analogWrite(blue_led,0);
-  
-  for(int i=0;i<3;i++)
-  {
-	theta[i]=0;
-	v_ang[i]=0;
-  }
+}
+void init_times_sensors()
+{
   time_gyro=millis();
   time_acc=millis();
   time_control=millis();
   t_gyro=micros();
   t_acc=micros();
   t_control=micros();
+}
+
+void stop_balance()
+{
+  velocity=100;
+  commandPi.set_pwm(velocity,velocity);    
+  commandPi.stop_cast();
+  auto_balance=0;
+  analogWrite(blue_led,0);
+  analogWrite(green_led,255);
+  analogWrite(red_led,0);
+}
+void acc_average(int N)
+{
+  int i;
+  for(i=0;i<3;i++) acc_av[i]=0;
+
+  for(i=1;i<N;i++)
+  {
+    if(!(i%10)){
+                analogWrite(blue_led,0);
+                analogWrite(green_led, rc/6);
+                analogWrite(red_led, rc);
+                rc=255-rc;
+    }
+    compass.read();
+    acc_av[0]+=((float)compass.a.x)*acc_gain;
+    acc_av[1]+=((float)compass.a.y)*acc_gain;
+    acc_av[2]+=((float)compass.a.z)*acc_gain;
+    delay(10*T_acc);
+  }
+  for(i=1;i<3;i++) acc_ac[i]/=(float)N;
+}
+void init_balance()
+{
+  drift_average(100);
+  analogWrite(blue_led,200);
+  analogWrite(green_led,255);
+  analogWrite(red_led, 0);
+  delay(5000);
+
+  analogWrite(blue_led,0);
+  analogWrite(green_led,0);
+  analogWrite(red_led,255);
+ 
+  acc_average(100);
+  for(int i=0;i<3;i++)
+  {
+        theta[i]=0;
+        v_ang[i]=0;
+  }
+  init_times_sensors();
+  auto_balance=1;
 }
 
 void angular_int()
@@ -486,8 +554,8 @@ void angular_int()
 
 }
 void loop() {
-/*
-    if(millis()-time_control>T_control)
+
+    if(auto_balance && millis()-time_control>T_control)
     {
 	t_control_new=micros();
 	dt_control=((float)(t_control_new-t_control))/1000000.0;
@@ -496,27 +564,27 @@ void loop() {
 	pos_lin=pos_lin+v_lin*dt_control;
 
 	
-	moc=(int)((7.4/vol)*( k_theta*theta[1] + k_v_ang*v_ang[1] + k_pos_lin*pos_lin + k_v_lin*v_lin));
+	moc=(int)((7.4/vol)*( k_acc*(acc[0]-acc_av[0]))+ k_theta*theta[1] + k_v_ang*v_ang[1] + k_pos_lin*pos_lin + k_v_lin*v_lin));
 	if(moc>255) moc=255;
 	else if(moc<-255) moc=-255;
 	
 	v_lin=float(moc)/255.0;
 
-	if(millis()<T_end)
-	{
+//	if(millis()<T_end)
+//	{
 		commandPi.set_pwm(abs(moc),abs(moc));
 		if(moc<0) commandPi.move_forward();
 		else commandPi.move_backward();
-	}
-	else
-	{
-		commandPi.stop_cast();
-		analogWrite(blue_led,255);
-		analogWrite(green_led,0);
-		analogWrite(red_led, 0);
-	}
+//	}
+//	else
+//	{
+//		commandPi.stop_cast();
+//		analogWrite(blue_led,255);
+//		analogWrite(green_led,0);
+//		analogWrite(red_led, 0);
+//	}
     }
-*/
+
     if(millis()-time_acc>T_acc)
     {
 	time_acc=millis();
