@@ -1,9 +1,10 @@
 //#include <Servo.h>
 //#include <NewPing.h>
+
 #define k_theta 40.0
 #define k_v_ang 0.69
-#define k_pos_lin 600.0
-#define k_v_lin 20.0
+#define k_pos_lin 400.0
+#define k_v_lin 0
 #define k_acc 0.1
 
 #include <Wire.h>
@@ -14,6 +15,9 @@
 L3G gyro;
 LSM303 compass;
 LPS ps;
+
+//float k_pos_lin=400.0;
+//float k_theta=40.0;
 
 float temperature,pressure,altitude;
 char report[80];
@@ -54,6 +58,9 @@ unsigned long T_serial_write=1000;	// co jaki czas wysylamy dane do kompa
 unsigned long T_gyro=3;
 unsigned long T_acc=3;
 unsigned long T_control=5;
+
+float T_filter_drift=15;
+float T_filter_theta=10;
 //float k_theta=25.0;
 //float k_v_ang=0.6;
 //float k_pos_lin=10.0;
@@ -547,10 +554,16 @@ void init_balance()
 void angular_int()
 {
 	int i;
-	for(i=0;i<3;i++) theta[i]+=dt_gyro*v_ang[i];
+	for(i=0;i<3;i++)
+	{
+		theta[i]+=dt_gyro*v_ang[i];
+		theta[i]=theta[i]*(1-dt_gyro/T_filter_theta);
+		
+		drift_av[i]=drift_av[i]*(1-dt_gyro/T_filter_drift); 
+	}
 	v_ang[0]=gyro.g.x*gyro_gain-drift_av[0];
 	v_ang[1]=gyro.g.y*gyro_gain-drift_av[1];
-	v_ang[2]=gyro.g.z*gyro_gain-drift_av[2];
+	v_ang[2]=gyro.g.z*gyro_gain-drift_av[2];	
 
 }
 void loop() {

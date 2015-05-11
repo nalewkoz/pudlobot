@@ -2,6 +2,7 @@
 #include <iostream>
 #include "conio.h"
 
+#define MAX_BUF 100
 #define cam_servo_pin 10
 #define cam_servo_max 2500
 #define cam_servo_min 500
@@ -19,6 +20,11 @@ char c;
 int fd;
 int cam_servo=1500;
 int speed=160;
+int nc;
+
+char file_name[]="log.txt";
+char bufor[MAX_BUF];
+FILE *filed;
 
 void send_command(int pin,int x)
 {
@@ -26,8 +32,15 @@ void send_command(int pin,int x)
 }
 void init()
 {
+    nc=0;
     fd=serialOpen(serial_port,serial_baud);
-    send_command(cam_servo_pin,cam_servo);
+    filed=fopen(file_name,"a");
+    time_t rawtime;
+    struct tm * timeinfo;
+    time ( &rawtime );
+    timeinfo = localtime ( &rawtime );
+    fprintf(filed,"\n====== NEW SESSION ======\n%s=========================\n",asctime(timeinfo));
+ //   send_command(cam:_servo_pin,cam_servo);
 }
 int main()
 {
@@ -36,6 +49,8 @@ int main()
     cout<<"Sterujemy robotem (awsdzx, =-, uh, lo)\nBy wyjsc: q\n";
     do
     {
+	if(inputAvailable())
+	{
 	c=getch();
 	switch(c)
 	{
@@ -102,7 +117,19 @@ int main()
 		cout<<"Brak takiej komendy\n";
 		break;
 	}
+	}
+	if(serialDataAvail(fd)>0)
+	{
+		bufor[nc++]=serialGetchar(fd);
+		if(nc==MAX_BUF-1)
+		{
+			bufor[nc]=0;
+			nc=0;
+			fprintf(filed,bufor);
+		}
+	}
     }
     while(c!='q');
     serialClose(fd);
+    fclose(filed);
 }
