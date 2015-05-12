@@ -5,7 +5,9 @@
 #define k_v_ang 0.69
 #define k_pos_lin 400.0
 #define k_v_lin 0
-#define k_acc 0.1
+#define k_acc 0.05
+
+#define velocity_min 0	// Za mala predkosc powoduje, ze silniki nie rusza!
 
 #include <Wire.h>
 #include <LSM303.h>
@@ -16,13 +18,12 @@ L3G gyro;
 LSM303 compass;
 LPS ps;
 
+int DEBUG_MODE=0;
 //float k_pos_lin=400.0;
 //float k_theta=40.0;
 
-float temperature,pressure,altitude;
-char report[80];
-
-#define velocity_min 0	// Za mala predkosc powoduje, ze silniki nie rusza!
+//float temperature,pressure,altitude;
+//char report[80];
 
 //#define sonar200_N 5 // ile pomiarow do usredniania
 
@@ -54,13 +55,14 @@ unsigned long T_end=10000;
 unsigned long T_led=1000;
 unsigned long T_vol=100;		//czas probkowania napiecia
 unsigned long T_vol_in=2000; 	//czas ch. filtru pomiaru napiecia
-unsigned long T_serial_write=1000;	// co jaki czas wysylamy dane do kompa
+unsigned long T_serial_write_vol=1000;	// co jaki czas wysylamy dane o napieciu do kompa
+unsigned long T_serial_write_control=4; // co jaki czas wysylamy dane o czujnikach gyro/acc do kompa
 unsigned long T_gyro=3;
 unsigned long T_acc=3;
 unsigned long T_control=5;
 
-float T_filter_drift=15;
-float T_filter_theta=10;
+float T_filter_drift=5;
+float T_filter_theta=5;
 //float k_theta=25.0;
 //float k_v_ang=0.6;
 //float k_pos_lin=10.0;
@@ -72,7 +74,7 @@ unsigned long time_led;
 //unsigned long time_sonar200;
 //unsigned long time_sonar200_2;
 unsigned long time_vol;
-unsigned long time_serial_write;
+unsigned long time_serial_write_vol, time_serial_write_control;
 unsigned long time_gyro, time_acc, time_control;
 unsigned long t_gyro,t_gyro_new,t_acc,t_acc_new,t_control,t_control_new;
 
@@ -129,7 +131,7 @@ private:
     int pos;
     int speeda;
     int speedb;
-    int breaking;
+    int braking;
 
 public:
 
@@ -139,9 +141,9 @@ public:
 	state=0;;
     }
     // STEROWANIE SILNIKAMI. WYROZNIAMY STAN AKTYWNEGO ZATRZYMANIA (BREAKING)!
-    void set_pwm(int sa=0,int sb=0)	//można tym ustawic szybkosc lub tylko wlaczyc pwm z ustalona wczesniej szybkoscia
+    void set_pwm(int sa=256,int sb=256)	//można tym ustawic szybkosc lub tylko wlaczyc pwm z ustalona wczesniej szybkoscia
     {
-	if(sa || sb)
+	if(sa<256 && sb<256)
 	{
 	    speeda=sa;
 	    speedb=sb;
@@ -150,17 +152,17 @@ public:
 	analogWrite(pwma_pin,speeda);
 	analogWrite(pwmb_pin,speedb);
     }
-    void quit_breaking()
+    void quit_braking()
     {
-	if(breaking)
+	if(braking)
 	{
 	    set_pwm();
-	    breaking=0;
+	    braking=0;
 	}
     }
     void turn_right()
     {
-	quit_breaking();
+	quit_braking();
 	digitalWrite(ain1_pin,HIGH);
 	digitalWrite(ain2_pin,LOW);
 	digitalWrite(bin1_pin,HIGH);
@@ -168,7 +170,7 @@ public:
     }   
     void turn_left()
     {
-	quit_breaking(); 
+	quit_braking(); 
 	digitalWrite(ain2_pin,HIGH);
 	digitalWrite(ain1_pin,LOW);
 	digitalWrite(bin2_pin,HIGH);
@@ -176,7 +178,7 @@ public:
     }
     void move_forward()
     {
-	quit_breaking();
+	quit_braking();
 	digitalWrite(ain2_pin,HIGH);
 	digitalWrite(ain1_pin,LOW);
 	digitalWrite(bin1_pin,HIGH);
@@ -184,7 +186,7 @@ public:
     }
     void move_backward()
     {
-	quit_breaking();
+	quit_braking();
 	digitalWrite(ain1_pin,HIGH);
 	digitalWrite(ain2_pin,LOW);
 	digitalWrite(bin2_pin,HIGH);
@@ -192,17 +194,17 @@ public:
     }
     void stop_cast()
     {
-	quit_breaking();
+	quit_braking();
 	digitalWrite(ain1_pin,LOW);
 	digitalWrite(bin1_pin,LOW);
 	digitalWrite(ain2_pin,LOW);
 	digitalWrite(bin2_pin,LOW);
     }
-    void stop_break()
+    void stop_brake()
     {
 	analogWrite(pwma_pin,0);
 	analogWrite(pwmb_pin,0);
-	breaking=1;
+	braking=1;
     }
     void sleep_forever()
     {
@@ -224,7 +226,7 @@ public:
 	if(pin==-1 && value<256 & value>=velocity_min)
 	{
 	    velocity=value;
-	    if(!breaking)	 set_pwm(value,value);
+	    if(!braking)	 set_pwm(value,value);
 	    else {speeda=value; speedb=value;}
 	}
 	else
@@ -254,7 +256,7 @@ public:
 	switch(val)
 	{
 	    case 0:
-		stop_break();
+		stop_brake();
 		break;
 	    case 1:
 		stop_cast();
@@ -274,9 +276,6 @@ public:
             case 6:
 		init_balance();
 		break;
-//	    case 7:
-//		stop_balance();
-//		break;
 	    default:
 		return 0;
 	}
@@ -463,7 +462,7 @@ void setup() {
     //time_sonar200=0;
     time_vol=0;
     a_vol=((float)T_vol)/((float)T_vol_in);
-
+  time_serial_write_vol=millis();
   //  digitalWrite(stby_pin,HIGH);
     vol=15.0*((float)analogRead(vol_pin))/1023.0;
   Serial.print("Voltage: ");
@@ -493,6 +492,7 @@ void init_times_sensors()
   time_gyro=millis();
   time_acc=millis();
   time_control=millis();
+  time_serial_write_control=millis();
   t_gyro=micros();
   t_acc=micros();
   t_control=micros();
@@ -507,6 +507,7 @@ void stop_balance()
   analogWrite(blue_led,0);
   analogWrite(green_led,255);
   analogWrite(red_led,0);
+  Serial.println("END");
 }
 void acc_average(int N)
 {
@@ -547,8 +548,11 @@ void init_balance()
         theta[i]=0;
         v_ang[i]=0;
   }
+  pos_lin=0;
+
   init_times_sensors();
   auto_balance=1;
+  Serial.println("START");
 }
 
 void angular_int()
@@ -559,7 +563,7 @@ void angular_int()
 		theta[i]+=dt_gyro*v_ang[i];
 		theta[i]=theta[i]*(1-dt_gyro/T_filter_theta);
 		
-		drift_av[i]=drift_av[i]*(1-dt_gyro/T_filter_drift); 
+		drift_av[i]=drift_av[i]*(1-dt_gyro/T_filter_drift)+v_ang[i]*dt_gyro/T_filter_drift; 
 	}
 	v_ang[0]=gyro.g.x*gyro_gain-drift_av[0];
 	v_ang[1]=gyro.g.y*gyro_gain-drift_av[1];
@@ -571,7 +575,7 @@ void loop() {
     if(auto_balance && millis()-time_control>T_control)
     {
 	t_control_new=micros();
-	dt_control=((float)(t_control_new-t_control))/1000000.0;
+	dt_control=((float)(t_control_new-t_control))/1000000.0; // w sekundach!
 	t_control=t_control_new;
 
 	pos_lin=pos_lin+v_lin*dt_control;
@@ -583,119 +587,34 @@ void loop() {
 	
 	v_lin=float(moc)/255.0;
 
-//	if(millis()<T_end)
-//	{
-		commandPi.set_pwm(abs(moc),abs(moc));
-		if(moc<0) commandPi.move_forward();
-		else commandPi.move_backward();
-//	}
-//	else
-//	{
-//		commandPi.stop_cast();
-//		analogWrite(blue_led,255);
-//		analogWrite(green_led,0);
-//		analogWrite(red_led, 0);
-//	}
+	if(DEBUG_MODE>0) moc=0;
+
+	commandPi.set_pwm(abs(moc),abs(moc));
+	if(moc<0) commandPi.move_forward();
+	else commandPi.move_backward();
     }
 
-    if(millis()-time_acc>T_acc)
+    if(auto_balance && millis()-time_acc>T_acc)
     {
 	time_acc=millis();
 	t_acc_new=micros();
 	compass.read();
-	dt_acc=((float)(t_acc_new-t_acc))/1000000.0;
+	dt_acc=((float)(t_acc_new-t_acc))/1000000.0;  // w sekundach!
 	t_acc=t_acc_new;
 	acc[0]=((float)compass.a.x)*acc_gain;
 	acc[1]=((float)compass.a.y)*acc_gain;
 	acc[2]=((float)compass.a.z)*acc_gain;
 	acc_total=(1-a_acc)*acc_total+a_acc*sqrt(acc[0]*acc[0]+acc[1]*acc[1]+acc[2]*acc[2]);
-	/*if(millis()<T_end){
-		for(i=0;i<3;i++)
-        	{
-                	Serial.print(acc[i]);
-                	Serial.print("  ");
-        	}
-		Serial.println(t_acc);
-	}*/
 
-// DO TESTOWANIA KORELACJI
-/*	snprintf(report, sizeof(report), "A: %6d %6d %6d    M: %6d %6d %6d",
-	compass.a.x, compass.a.y, compass.a.z,
-	compass.m.x, compass.m.y, compass.m.z);
-	Serial.println(report);
-*/
-//	Serial.print("dt_acc = ");
-//	Serial.println(dt_acc,4);
     }
-    if(millis()-time_gyro>T_gyro)
+    if(auto_balance && millis()-time_gyro>T_gyro)
     {
 	time_gyro=millis();
 	t_gyro_new=micros();
 	gyro.read();
-	dt_gyro=((float)(t_gyro_new-t_gyro))/1000000.0;
+	dt_gyro=((float)(t_gyro_new-t_gyro))/1000000.0; // w sekundach!
 	t_gyro=t_gyro_new;
-
-// DO TESTOWANIA KORELACJI MIEDZY KOLEJNYMI PROBKAMI:
-/*	Serial.print("Gyro data: ");
-	Serial.print(gyro.g.x);
-	Serial.print("  ");
-	Serial.print(gyro.g.y);
-        Serial.print("  ");
-	Serial.println(gyro.g.z);
-*/
-
-//	Serial.print("dt_gyro = ");
-//	Serial.println(dt_gyro,4);
-
 	angular_int();
-// =============  CONTROL  ==================================================
-/*	t_control_new=micros();
-        dt_control=((float)(t_control_new-t_control))/1000000.0;
-        t_control=t_control_new;
-
-        pos_lin=pos_lin+v_lin*dt_control;
-
-
-        moc=(int)((7.4/vol)*( k_theta*theta[1] + k_v_ang*v_ang[1] + k_pos_lin*pos_lin + k_v_lin*v_lin));
-
-        if(moc>255) moc=255;
-        else if(moc<-255) moc=-255;
-
-        v_lin=float(moc)/255.0;
-
-        if(millis()<T_end)
-        {
-                commandPi.set_pwm(abs(moc),abs(moc));
-                if(moc<0) commandPi.move_forward();
-                else commandPi.move_backward();
-        }
-	 else
-        {
-                commandPi.stop_cast();
-                analogWrite(blue_led,255);
-                analogWrite(green_led,0);
-                analogWrite(red_led, 0);
-        }
-*/
-
-// ===============  SENS INFO  ================================
-	/*
-	if(millis()<T_end)
-	{
-		for(i=0;i<3;i++)
-        	{
-        	        Serial.print(v_ang[i]);
-        	        Serial.print("  ");
-			Serial.print(theta[i]);
-			Serial.print("  ");
-	        }
-		Serial.print(pos_lin);
-		Serial.print("  ");
-		Serial.print(v_lin);
-		Serial.print("  ");
-	        Serial.println(t_gyro);
-	}
-	*/
 //	compass.read();
 //	pressure = ps.readPressureMillibars();
 	//altitude = ps.pressureToAltitudeMeters(pressure);
@@ -706,8 +625,6 @@ void loop() {
 	time_vol=millis();
 	vol_act=15.0*((float)analogRead(vol_pin))/1023.0;
 	vol=vol*(1-a_vol)+a_vol*vol_act;
-//	light_int=analogRead(light_pin);
-//	current= 36.7*((float)analogRead(current_pin))/1023.0-18.3;
     }
 
 // ==== MIGAJACY MALY LED =====
@@ -718,15 +635,19 @@ void loop() {
 	digitalWrite(led_pin,led_state);
     } 
 */
-    if(millis()-time_serial_write>T_serial_write)
+    if(millis()-time_serial_write_vol>T_serial_write_vol)
     {
-	time_serial_write=millis();
+	time_serial_write_vol=millis();
 	
 //	if(millis()>T_end){
-		Serial.print("Napiecie: ");
+//		Serial.print("Napiecie: ");
 		Serial.print(vol);
 		Serial.println(" V");
-//	}
+//	}a
+    }
+    if(auto_balance && millis()-time_serial_write_control>T_serial_write_control)
+    {
+	time_serial_write_control=millis();
 	for(i=0;i<3;i++)
         {
                 Serial.print(v_ang[i]);
@@ -736,53 +657,18 @@ void loop() {
         }
         Serial.print(pos_lin);
         Serial.print("  ");
-        Serial.print(v_lin);
-        Serial.print("  ");
+ //       Serial.print(v_lin);
+ //       Serial.print("  ");
         Serial.println(t_gyro);
         for(i=0;i<3;i++)
         {
                 Serial.print(acc[i]);
                 Serial.print("  ");
         }
-	Serial.print(acc_total,1);
-	Serial.print(" ");
+//	Serial.print(acc_total,1);
+//	Serial.print(" ");
         Serial.println(t_acc);
 
-/*
-	Serial.print("Angular vel. ");
-	Serial.print("X: ");
-	Serial.print(v_ang[0]);
-	Serial.print(" Y: ");
-	Serial.print(v_ang[1]);
-	Serial.print(" Z: ");
-	Serial.println(v_ang[2]);
-	Serial.print("Theta ");
-        Serial.print("X: ");
-        Serial.print(theta[0]);
-        Serial.print(" Y: ");
-        Serial.print(theta[1]);
-        Serial.print(" Z: ");
-        Serial.println(theta[2]);
-	Serial.println(dt_gyro,4);
-	Serial.println(dt_acc,4);
-*/
-/*
-	snprintf(report, sizeof(report), "A: %.d %6d %6d    M: %6d %6d %6d",
-	compass.a.x, compass.a.y, compass.a.z,
-	compass.m.x, compass.m.y, compass.m.z);
-	Serial.println(report);
-*/
-
-//	Serial.print("p: ");
-//	Serial.print(pressure);
-//	Serial.print(" mbar\ta: ");
-//	Serial.print(temperature);
-//	Serial.println(" deg C");
-
-//	Serial.print("Swiatlo: ");
-//	Serial.println(light_int);
-//	Serial.print("Prad: ");
-//	Serial.println(current);
     }
     if(Serial.available())
     {
