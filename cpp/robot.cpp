@@ -1,3 +1,4 @@
+#include <wiringPi.h>
 #include <wiringSerial.h>
 #include <iostream>
 #include "conio.h"
@@ -128,6 +129,7 @@ int main()
 			fprintf(filed,bufor);
 		}
 	}
+//	delay(1); // to save processor time. Won't work with balancing mode - too much data flowing, and with this enabled we can at most take one letter per ms from serial input, which is too slow.
     }
     while(c!='q');
     serialClose(fd);
